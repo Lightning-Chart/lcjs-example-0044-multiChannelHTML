@@ -16,6 +16,7 @@ const lc = lightningChart({
 const chart = lc
     .ChartXY({
         container,
+        legend: { visible: false },
         defaultAxisX: { type: 'linear-highPrecision' },
         theme: Themes[new URLSearchParams(window.location.search).get('theme') || 'darkGold'] || undefined,
     })
@@ -31,16 +32,13 @@ chart.axisX.setTickStrategy(AxisTickStrategies.DateTime)
 
 const createChannel = (info) => {
     const axisY = chart.addAxisY({ iStack: -chart.getAxes(AxisPosition.Left).length })
-    const series = chart
-        .addPointLineAreaSeries({ dataPattern: 'ProgressiveX', axisY })
-        .setCurvePreprocessing({ type: 'spline' })
-        .setName(info.name)
+    const series = chart.addPointLineAreaSeries({ axisY }).setCurvePreprocessing({ type: 'spline' }).setName(info.name)
     createProgressiveTraceGenerator()
         .setNumberOfPoints(1000)
         .generate()
         .toPromise()
         .then((data) => {
-            series.appendJSON(data, { y: 'y', start: performance.timeOrigin, step: 60 * 1000 })
+            series.appendJSON(data, { start: performance.timeOrigin, step: 60 * 1000 })
         })
 
     // HTML header UI that displays channel name and allows modifying the channel.
