@@ -18,7 +18,20 @@ const chart = lc
         container,
         legend: { visible: false },
         defaultAxisX: { type: 'linear-highPrecision' },
-        theme: Themes[new URLSearchParams(window.location.search).get('theme') || 'darkGold'] || undefined,
+        theme: (() => {
+    const t = Themes[new URLSearchParams(window.location.search).get('theme') || 'darkGold'] || undefined
+    const smallView = Math.min(window.innerWidth, window.innerHeight) < 500
+    if (!window.__lcjsDebugOverlay) {
+        window.__lcjsDebugOverlay = document.createElement('div')
+        window.__lcjsDebugOverlay.style.cssText = 'position:fixed;top:0;left:0;background:rgba(0,0,0,0.7);color:#fff;padding:4px 8px;z-index:99999;font:12px monospace;pointer-events:none'
+        if (document.body) document.body.appendChild(window.__lcjsDebugOverlay)
+        setInterval(() => {
+            if (!window.__lcjsDebugOverlay.parentNode && document.body) document.body.appendChild(window.__lcjsDebugOverlay)
+            window.__lcjsDebugOverlay.textContent = window.innerWidth + 'x' + window.innerHeight + ' dpr=' + window.devicePixelRatio + ' small=' + (Math.min(window.innerWidth, window.innerHeight) < 500)
+        }, 500)
+    }
+    return t && smallView ? lcjs.scaleTheme(t, 0.5) : t
+})(),
     })
     .setTitle('')
     .setPadding({ top: 0 })
@@ -31,14 +44,19 @@ chart.axisY.dispose()
 chart.axisX.setTickStrategy(AxisTickStrategies.DateTime)
 
 const createChannel = (info) => {
-    const axisY = chart.addAxisY({ iStack: -chart.getAxes(AxisPosition.Left).length })
+    const axisY = chart.addAxisY({
+        iStack: -chart.getAxes(AxisPosition.Left).length,
+    })
     const series = chart.addPointLineAreaSeries({ axisY }).setCurvePreprocessing({ type: 'spline' }).setName(info.name)
     createProgressiveTraceGenerator()
         .setNumberOfPoints(1000)
         .generate()
         .toPromise()
         .then((data) => {
-            series.appendJSON(data, { start: performance.timeOrigin, step: 60 * 1000 })
+            series.appendJSON(data, {
+                start: performance.timeOrigin,
+                step: 60 * 1000,
+            })
         })
 
     // HTML header UI that displays channel name and allows modifying the channel.
@@ -142,19 +160,25 @@ chart.engine.container.style.color = isDarkTheme ? 'white' : 'black'
 // this overlay is only visible when the main X axis is not in view.
 const stickyXContainer = document.createElement('div')
 document.body.append(stickyXContainer)
-stickyXContainer.style.position = 'fixed'
-stickyXContainer.style.transform = 'translateY(-100%)'
 const stickyXChart = lc
-    .ChartXY({ container: stickyXContainer, defaultAxisX: { type: 'linear-highPrecision' } })
+    .ChartXY({
+        container: stickyXContainer,
+        defaultAxisX: { type: 'linear-highPrecision' },
+    })
     .setPadding({ top: 0, bottom: 0 })
     .setTitle('')
+stickyXContainer.style.position = 'fixed'
+stickyXContainer.style.transform = 'translateY(-100%)'
 stickyXChart.addEventListener('layoutchange', (event) => {
     stickyXContainer.style.height = `${event.axes.get(stickyXChart.axisX).height + 1}px`
     event.userChangedLayout()
 })
 chart.addEventListener('layoutchange', (event) => {
     stickyXContainer.style.width = `${event.chartWidth}px`
-    stickyXChart.setPadding({ left: event.margins.left, right: event.margins.right })
+    stickyXChart.setPadding({
+        left: event.margins.left,
+        right: event.margins.right,
+    })
     stickyXChart.engine.layout()
 })
 synchronizeAxisIntervals(chart.axisX, stickyXChart.axisX)
@@ -162,13 +186,18 @@ stickyXChart.axisX.setTickStrategy(AxisTickStrategies.DateTime)
 stickyXChart.axisY.dispose()
 // Hide sticky axis when it is not needed. NOTE: This part of code may have to be implemented differently based on application.
 const scrollChanged = () => {
-    const scrollTop = exampleContainer === document.body ? window.scrollY : exampleContainer.scrollTop
-    const stickyAxisVisible = Math.abs(scrollTop + exampleContainer.clientHeight - exampleContainer.scrollHeight) > 5
+    const isBodyScroll = exampleContainer === document.body
+    const scrollTop = isBodyScroll ? window.scrollY : exampleContainer.scrollTop
+    const viewportHeight = isBodyScroll ? window.innerHeight : exampleContainer.clientHeight
+    const scrollHeight = isBodyScroll ? document.documentElement.scrollHeight : exampleContainer.scrollHeight
+    const stickyAxisVisible = Math.abs(scrollTop + viewportHeight - scrollHeight) > 5
     stickyXContainer.style.display = stickyAxisVisible ? 'block' : 'none'
-    const chartBounds = exampleContainer.getBoundingClientRect()
-    stickyXContainer.style.left = `${chartBounds.left}px`
-    stickyXContainer.style.top = `${chartBounds.bottom}px`
+    const left = isBodyScroll ? container.getBoundingClientRect().left : exampleContainer.getBoundingClientRect().left
+    const top = isBodyScroll ? window.innerHeight : exampleContainer.getBoundingClientRect().bottom
+    stickyXContainer.style.left = `${left}px`
+    stickyXContainer.style.top = `${top}px`
     stickyXChart.engine.layout()
 }
 exampleContainer.onscroll = scrollChanged
 window.onscroll = scrollChanged
+scrollChanged()
