@@ -1,15 +1,32 @@
 window.lcjsSmallView = window.devicePixelRatio >= 2
 const lcjs = require('@lightningchart/lcjs')
 const { createProgressiveTraceGenerator } = require('@lightningchart/xydata')
-const { lightningChart, AxisPosition, Themes, AxisTickStrategies, synchronizeAxisIntervals } = lcjs
+const { lightningChart, AxisPosition, Themes, AxisTickStrategies, synchronizeAxisIntervals, emptyLine, SolidFill } = lcjs
 
 let channels = [{ name: 'Channel 1' }, { name: 'Channel 2' }, { name: 'Channel 3' }]
 
 const exampleContainer = document.getElementById('chart') || document.body
+exampleContainer.style.display = 'grid'
+
+const scrollContainer = document.createElement('div')
+scrollContainer.style.cssText = `
+    grid-area: 1 / 1;
+    overflow-y: auto;
+`
+exampleContainer.append(scrollContainer)
+
 const container = document.createElement('div')
-exampleContainer.append(container)
+scrollContainer.append(container)
 container.style.height = '200vh'
 container.style.width = '100%'
+
+const stickyXContainer = document.createElement('div')
+stickyXContainer.style.cssText = `
+    grid-area: 1 / 1;
+    align-self: end;
+    overflow: hidden;
+`
+exampleContainer.append(stickyXContainer)
 
 const lc = lightningChart({
             resourcesBaseUrl: new URL(document.head.baseURI).origin + new URL(document.head.baseURI).pathname + 'resources/',
@@ -18,7 +35,6 @@ const chart = lc
     .ChartXY({
         container,
         legend: { visible: false },
-        defaultAxisX: { type: 'linear-highPrecision' },
         theme: (() => {
     const t = Themes[new URLSearchParams(window.location.search).get('theme') || 'darkGold'] || undefined
     return t && window.lcjsSmallView ? lcjs.scaleTheme(t, 0.5) : t
@@ -31,6 +47,14 @@ textRenderer: window.lcjsSmallView ? lcjs.htmlTextRenderer : undefined,
     .setCursor((cursor) => cursor.setKeepWithinAxisBoundaries(true))
 
 const isDarkTheme = chart.getTheme().isDark
+const themeBackgroundFill = chart.getTheme().chartXYSeriesBackgroundFillStyle
+const themeBackgroundColor =
+    typeof themeBackgroundFill.getColor === 'function'
+        ? themeBackgroundFill.getColor()
+        : themeBackgroundFill.getColorStops()[themeBackgroundFill.getColorStops().length - 1].color
+const backgroundFill = new SolidFill({ color: themeBackgroundColor.setA(255) })
+
+chart.setBackgroundFillStyle(backgroundFill).setSeriesBackgroundFillStyle(backgroundFill)
 
 chart.axisY.dispose()
 chart.axisX.setTickStrategy(AxisTickStrategies.DateTime)
@@ -148,48 +172,49 @@ addChButton.onclick = () => {
 chart.engine.container.style.color = isDarkTheme ? 'white' : 'black'
 
 // Sticky X axis
-// this is achieved with a second overlay ChartXY that only consists of an X axis that is synchronized and aligned with the main X axis.
-// this overlay is only visible when the main X axis is not in view.
-const stickyXContainer = document.createElement('div')
-document.body.append(stickyXContainer)
+// A second ChartXY containing only an X-axis acts as the sticky overlay.
 const stickyXChart = lc
     .ChartXY({
         container: stickyXContainer,
-        defaultAxisX: { type: 'linear-highPrecision' },
+        legend: { visible: false },
     })
-    .setPadding({ top: 0, bottom: 0 })
     .setTitle('')
-stickyXContainer.style.position = 'fixed'
-stickyXContainer.style.transform = 'translateY(-100%)'
-stickyXChart.addEventListener('layoutchange', (event) => {
-    stickyXContainer.style.height = `${event.axes.get(stickyXChart.axisX).height + 1}px`
-    event.userChangedLayout()
-})
+    .setBackgroundFillStyle(backgroundFill)
+    .setSeriesBackgroundFillStyle(backgroundFill)
+    .setSeriesBackgroundStrokeStyle(emptyLine)
+
+stickyXChart.axisY.dispose()
+synchronizeAxisIntervals(chart.axisX, stickyXChart.axisX)
+stickyXChart.axisX.setTickStrategy(AxisTickStrategies.DateTime)
+
+// Match the sticky overlay with the real X-axis layout.
 chart.addEventListener('layoutchange', (event) => {
-    stickyXContainer.style.width = `${event.chartWidth}px`
+    const axisLayout = event.axes.get(chart.axisX)
+    if (!axisLayout) return
+
+    const height = Math.ceil(event.chartHeight - axisLayout.top)
+
+    if (stickyXContainer.clientHeight !== height) {
+        stickyXContainer.style.height = `${height}px`
+    }
+
+    if (stickyXContainer.clientWidth !== event.chartWidth) {
+        stickyXContainer.style.width = `${event.chartWidth}px`
+    }
+
     stickyXChart.setPadding({
         left: event.margins.left,
         right: event.margins.right,
     })
     stickyXChart.engine.layout()
 })
-synchronizeAxisIntervals(chart.axisX, stickyXChart.axisX)
-stickyXChart.axisX.setTickStrategy(AxisTickStrategies.DateTime)
-stickyXChart.axisY.dispose()
-// Hide sticky axis when it is not needed. NOTE: This part of code may have to be implemented differently based on application.
-const scrollChanged = () => {
-    const isBodyScroll = exampleContainer === document.body
-    const scrollTop = isBodyScroll ? window.scrollY : exampleContainer.scrollTop
-    const viewportHeight = isBodyScroll ? window.innerHeight : exampleContainer.clientHeight
-    const scrollHeight = isBodyScroll ? document.documentElement.scrollHeight : exampleContainer.scrollHeight
-    const stickyAxisVisible = Math.abs(scrollTop + viewportHeight - scrollHeight) > 5
-    stickyXContainer.style.display = stickyAxisVisible ? 'block' : 'none'
-    const left = isBodyScroll ? container.getBoundingClientRect().left : exampleContainer.getBoundingClientRect().left
-    const top = isBodyScroll ? window.innerHeight : exampleContainer.getBoundingClientRect().bottom
-    stickyXContainer.style.left = `${left}px`
-    stickyXContainer.style.top = `${top}px`
-    stickyXChart.engine.layout()
+
+// Show the overlay until the real X-axis enters the viewport.
+const updateStickyAxis = () => {
+    const distanceFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight
+
+    stickyXContainer.style.visibility = distanceFromBottom > 1 ? 'visible' : 'hidden'
 }
-exampleContainer.onscroll = scrollChanged
-window.onscroll = scrollChanged
-scrollChanged()
+
+scrollContainer.addEventListener('scroll', updateStickyAxis)
+updateStickyAxis()

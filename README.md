@@ -32,6 +32,8 @@ The use case is:
 -   Channels can be dynamically added or removed
 -   Many charts which can be scrolled up/down in view. Shared time view stays always visible (Sticky X axis)
 
+For sticky X-axis specific guidance, prefer the dedicated example: https://lightningchart.com/js-charts/interactive-examples/examples/lcjs-example-0057-stickyXAxis.html
+
 The example shows how it is possible to creatively interoperate with normal HTML rendered content along side the charts even with this kind of complicated layout.
 In this example, the HTML content is created with JavaScript APIs, but in real applications likely a framework such as React, Angular or Vue would be used to render this content.
 Even so, the same logic can be applied.
@@ -82,6 +84,6 @@ Direct developer email support can be purchased through a [Support Plan][4] or b
 © LightningChart Ltd 2009-2026. All rights reserved.
 
 
-[XY cartesian chart]: https://lightningchart.com/js-charts/api-documentation/v8.3.0/classes/ChartXY.html
-[Axis]: https://lightningchart.com/js-charts/api-documentation/v8.3.0/classes/Axis.html
+[XY cartesian chart]: https://lightningchart.com/js-charts/api-documentation/v9.0.0/classes/ChartXY.html
+[Axis]: https://lightningchart.com/js-charts/api-documentation/v9.0.0/classes/Axis.html
 
